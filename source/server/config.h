@@ -36,6 +36,7 @@ namespace Config
 //! runs a check that all the required fields are present
 bool checkConfig();
 bool fromArgs( int argc, char* argv[] );
+bool LoadConfigFile(const std::string& filename);
 
 //! checks if a password has been set for server access
 bool isPublic();
@@ -83,7 +84,6 @@ void setPrintStats(bool value);
 void setWebserverEnabled(bool value);
 void setWebserverPort( unsigned int port );
 void setForeground(bool value);
-void loadConfigFile(const std::string& filename);
 void setResourceDir(std::string dir);
 void setAuthFile(const std::string& file);
 void setMOTDFile(const std::string& file);

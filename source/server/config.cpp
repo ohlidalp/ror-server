@@ -28,8 +28,8 @@ along with Foobar. If not, see <http://www.gnu.org/licenses/>.
 // simpleopt by http://code.jellycan.com/simpleopt/
 // license: MIT
 #include "SimpleOpt.h"
-#include <rudeconfig/config.h>
 #include <cmath>
+#include <fstream>
 #ifdef __GNUC__
 #include <unistd.h>
 #include <stdlib.h>
@@ -153,7 +153,7 @@ void showUsage()
     printf("\n" \
 "Usage: rorserver [OPTIONS] <paramaters>\n" \
 " Where [OPTIONS] and <parameters>\n" \
-" -c (-config) <config file>   Loads the configuration from a file rather than from the commandline\n"
+" -c (-config) <JSON file>     Loads the configuration from a file\n"
 " -name <name>                 Name of the server, no spaces, only \n"
 "                              [a-z,0-9,A-Z]\n"
 " -terrain <mapname>           Map name (defaults to 'any')\n"
@@ -357,7 +357,7 @@ bool fromArgs( int argc, char* argv[] )
                 setVoIP(args.OptionArg());
             break;
             case OPT_CONFIGFILE:
-                loadConfigFile(args.OptionArg());
+                LoadConfigFile(args.OptionArg());
             break;
             case OPT_HELP: 
             default:
@@ -487,43 +487,75 @@ void setResourceDir(std::string dir)
     s_resourcedir = dir;
 }
 
-void loadConfigFile(const std::string& filename)
+#define GET_VALUE_STR( _KEY_, _SETTER_) { if (root[_KEY_].isString())  _SETTER_(root[_KEY_].asString()); }
+#define GET_VALUE_INT( _KEY_, _SETTER_) { if (root[_KEY_].isNumeric()) _SETTER_(root[_KEY_].asInt()); }
+#define GET_VALUE_BOOL(_KEY_, _SETTER_) { if (root[_KEY_].isBool())    _SETTER_(root[_KEY_].asBool()); }
+
+bool LoadConfigFile(const std::string& filename)
 {
     Logger::Log(LOG_INFO, "loading config file %s ...", filename.c_str());
-    rude::Config config;
-    if(config.load(filename.c_str()))
+    Json::Reader reader;
+    Json::Value root;
+    std::ifstream conf_file(filename);
+    if (!conf_file.is_open())
     {
-        if(config.exists("baseconfig"))    loadConfigFile(config.getStringValue   ("baseconfig"));
-        if(config.exists("slots"))         setMaxClients(config.getIntValue       ("slots"));
-        if(config.exists("name"))          setServerName(config.getStringValue    ("name"));
-        if(config.exists("scriptname"))    setScriptName(config.getStringValue    ("scriptname"));
-        if(config.exists("terrain"))       setTerrain   (config.getStringValue    ("terrain"));
-        if(config.exists("password"))      setPublicPass(config.getStringValue    ("password"));
-        if(config.exists("ip"))            setIPAddr    (config.getStringValue    ("ip"));
-        if(config.exists("port"))          setListenPort(config.getIntValue       ("port"));
-        if(config.exists("mode"))          setServerMode((std::string(config.getStringValue("mode")) == std::string("inet"))?SERVER_INET:SERVER_LAN);
-
-        if(config.exists("printstats"))    setPrintStats(config.getBoolValue      ("printstats"));
-        if(config.exists("webserver"))     setWebserverEnabled(config.getBoolValue("webserver"));
-        if(config.exists("webserverport")) setWebserverPort(config.getIntValue    ("webserverport"));
-        if(config.exists("foreground"))    setForeground(config.getBoolValue      ("foreground"));
-
-        if(config.exists("verbosity"))     Logger::SetLogLevel(LOGTYPE_DISPLAY,   (LogLevel)config.getIntValue("verbosity"));
-        if(config.exists("logverbosity"))  Logger::SetLogLevel(LOGTYPE_FILE,      (LogLevel)config.getIntValue("logverbosity"));
-        if(config.exists("resdir"))        setResourceDir(config.getStringValue   ("resdir"));
-        if(config.exists("logfilename"))   Logger::SetOutputFile(config.getStringValue("logfilename"));
-        if(config.exists("authfile"))      setAuthFile(config.getStringValue      ("authfile"));
-        if(config.exists("motdfile"))      setMOTDFile(config.getStringValue      ("motdfile"));
-        if(config.exists("rulesfile"))     setRulesFile(config.getStringValue     ("rulesfile"));
-        if(config.exists("vehiclelimit"))  setMaxVehicles(config.getIntValue      ("vehiclelimit"));
-        if(config.exists("owner"))         setOwner(config.getStringValue         ("owner"));
-        if(config.exists("website"))       setWebsite(config.getStringValue       ("website"));
-        if(config.exists("irc"))           setIRC(config.getStringValue           ("irc"));
-        if(config.exists("voip"))          setVoIP(config.getStringValue          ("voip"));
-    } else
-    {
-        Logger::Log(LOG_ERROR, "could not load config file %s : %s", filename.c_str(), config.getError());
+        Logger::Log(LOG_ERROR, "Failed to open config file %s", filename.c_str());
+        return false;
     }
+    if (!reader.parse(conf_file, root, false) || !root.isObject())
+    {
+        Logger::Log(LOG_ERROR, "could not load config file %s, error messages:\n%s", filename.c_str(), reader.getFormattedErrorMessages().c_str());
+        return false;
+    }
+
+    if (root["base-config"].isString())
+    {
+        LoadConfigFile(root["base-config"].asString());
+    }
+    if (root["mode"].isString())
+    {
+        if (root["mode"] == "lan")
+        {
+            setServerMode(SERVER_LAN);
+        }
+        else if (root["mode"] == "inet")
+        {
+            setServerMode(SERVER_INET);
+        }
+    }
+    if (root["verbosity"].isNumeric())
+    {
+        Logger::SetLogLevel(LOGTYPE_DISPLAY, (LogLevel)root["verbosity"].asInt());
+    }
+    if (root["log-verbosity"].isNumeric())
+    {
+        Logger::SetLogLevel(LOGTYPE_FILE, (LogLevel)root["log-verbosity"].asInt());
+    }
+
+    GET_VALUE_STR("name",           setServerName);
+    GET_VALUE_STR("script-file",    setScriptName);
+    GET_VALUE_STR("terrain",        setTerrain);
+    GET_VALUE_STR("password",       setPublicPass);
+    GET_VALUE_STR("ip",             setIPAddr);
+    GET_VALUE_STR("resource-dir",   setResourceDir);
+    GET_VALUE_STR("log-file",       Logger::SetOutputFile);
+    GET_VALUE_STR("auth-file",      setAuthFile);
+    GET_VALUE_STR("motd-file",      setMOTDFile);
+    GET_VALUE_STR("rules-file",     setRulesFile);
+    GET_VALUE_STR("owner",          setOwner);
+    GET_VALUE_STR("website",        setWebsite);
+    GET_VALUE_STR("irc",            setIRC);
+    GET_VALUE_STR("voip",           setVoIP);
+
+    GET_VALUE_INT("max-clients",    setMaxClients);
+    GET_VALUE_INT("webserver-port", setWebserverPort);
+    GET_VALUE_INT("vehicle-limit",  setMaxVehicles);
+
+    GET_VALUE_BOOL("print-stats",   setPrintStats);
+    GET_VALUE_BOOL("use-webserver", setWebserverEnabled);
+    GET_VALUE_BOOL("foreground",    setForeground);
+
+    return true;
 }
 
 } //namespace Config
