@@ -340,10 +340,12 @@ Value::Value(const Value& other)
   case stringValue:
     if (other.value_.string_) {
       value_.string_ = duplicateStringValue(other.value_.string_);
-      allocated_ = true;
+      // Bitfield int of length 1: values are `0` or `-1`, see https://en.wikipedia.org/wiki/Twos-complement
+      // GCC reports >> error: overflow in implicit constant conversion [-Werror=overflow]
+      allocated_ = -1;
     } else {
       value_.string_ = 0;
-      allocated_ = false;
+      allocated_ = false; // This is OK with GCC
     }
     break;
 #ifndef JSON_VALUE_USE_INTERNAL_MAP
