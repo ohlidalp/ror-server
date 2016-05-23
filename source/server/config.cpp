@@ -26,6 +26,7 @@ along with Foobar. If not, see <http://www.gnu.org/licenses/>.
 #include "utils.h"
 
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #ifdef __GNUC__
 #include <unistd.h>
