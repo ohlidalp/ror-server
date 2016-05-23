@@ -24,6 +24,8 @@ along with Foobar. If not, see <http://www.gnu.org/licenses/>.
 #include <string>
 #include <vector>
 
+#include <chrono>
+#include <thread>
 #include <stdlib.h>
 #include <string.h>
 #include <cstdio>
@@ -92,11 +94,7 @@ int ReadLinesFromFile(std::string filename, std::vector<std::string> &lines)
 
 void SleepSeconds(unsigned int seconds)
 {
-#ifndef _WIN32
-    sleep(seconds);
-#else
-    Sleep(seconds * 1000);
-#endif
+    std::this_thread::sleep_for(std::chrono::seconds(seconds));
 }
 
 } // namespace Utils
