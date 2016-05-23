@@ -36,14 +36,19 @@ if(WIN32)
   set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL     "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL}     /DEBUG /LTCG /OPT:REF")
   set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO} /DEBUG /LTCG /OPT:REF")
 ELSEIF(UNIX)
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE        "${CMAKE_EXE_LINKER_FLAGS_RELEASE}      -std=c++11 -O2 -march=nocona -ffast-math")
-  set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO} -std=c++11 -Og -g")
+  set(CMAKE_CXX_FLAGS                       "-std=c++0x -pedantic -Wall -Werror ${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS_DEBUG                 "${CMAKE_CXX_FLAGS_DEBUG}          -Og -g -Wall")
+  set(CMAKE_CXX_FLAGS_RELEASE               "${CMAKE_CXX_FLAGS_RELEASE}        -O2 -ffast-math -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO        "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -ffast-math -g")
+  set(CMAKE_CXX_FLAGS_MINSIZEREL            "${CMAKE_CXX_FLAGS_MINSIZEREL}     -Os -ffast-math -DNDEBUG")
 
-  # add gdb debugging stuff
-  set(CMAKE_CXX_FLAGS_DEBUG                 "-std=c++11 -pedantic -Wall -Werror -ggdb ${CMAKE_CXX_FLAGS_DEBUG}")
-  set(CMAKE_EXE_LINKER_FLAGS_DEBUG          "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -std=c++11 -Og -ggdb ")
-  set(CMAKE_SHARED_LINKER_FLAGS_DEBUG       "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -std=c++11 -Og -ggdb")
-  set(CMAKE_MODULE_LINKER_FLAGS_DEBUG       "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} -std=c++11 -Og -ggdb")
+  set(CMAKE_EXE_LINKER_FLAGS_DEBUG          "${CMAKE_EXE_LINKER_FLAGS_DEBUG}")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE        "${CMAKE_EXE_LINKER_FLAGS_RELEASE}")
+  set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO}")
+
+  # add additional gdb debugging stuff
+  set(CMAKE_SHARED_LINKER_FLAGS_DEBUG       "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -Og -ggdb")
+  set(CMAKE_MODULE_LINKER_FLAGS_DEBUG       "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} -Og -ggdb")
 endif(WIN32)
 
 # fix executable paths for windows
@@ -61,7 +66,6 @@ endif()
 option(RORSERVER_GUI "build server GUI, experimental" FALSE)
 option(RORSERVER_WITH_ANGELSCRIPT "adds scripting support" FALSE)
 option(RORSERVER_WITH_WEBSERVER "adds the webserver" FALSE)
-option(RORSERVER_NO_STACKLOG "disables stacklog" TRUE)
 
 
 IF(NOT WIN32)
@@ -77,7 +81,8 @@ endif()
 
 
 add_subdirectory("dependencies/socketw")
-add_subdirectory("dependencies/rudeconfig")
+add_subdirectory("dependencies/jsoncpp")
+
 add_subdirectory("source/server")
 
 if(RORSERVER_WITH_ANGELSCRIPT)
@@ -90,5 +95,4 @@ endif(RORSERVER_GUI)
 
 if(RORSERVER_WITH_WEBSERVER)
 	add_subdirectory("dependencies/ctemplate")
-	add_subdirectory("dependencies/jsoncpp")
 endif(RORSERVER_WITH_WEBSERVER)

@@ -1,614 +1,494 @@
+/*
+This file is part of "Rigs of Rods Server" (Relay mode)
+
+Copyright 2007   Pierre-Michel Ricordel
+Copyright 2014+  Rigs of Rods Community
+
+"Rigs of Rods Server" is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation, either version 3
+of the License, or (at your option) any later version.
+
+"Rigs of Rods Server" is distributed in the hope that it will
+be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Foobar. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #include "config.h"
 
-// simpleopt by http://code.jellycan.com/simpleopt/
-// license: MIT
-#include "SimpleOpt.h"
-#include "SocketW.h"
-#include "rornet.h"
-#include "HttpMsg.h"
 #include "logger.h"
 #include "sequencer.h"
 #include "sha1_util.h"
+#include "utils.h"
 
 #include <cmath>
-
-#ifdef _WIN32
-#include <windows.h>
-#include <time.h>
-#else
-#include <sys/time.h>
-#endif
-
+#include <cstring>
+#include <fstream>
 #ifdef __GNUC__
 #include <unistd.h>
 #include <stdlib.h>
 #endif
 
-#include <cstdio>
-
-#ifndef NOCMDLINE
-
-// option identifiers
-enum
-{
-	OPT_HELP,
-	OPT_IP,
-	OPT_PORT,
-	OPT_NAME,
-	OPT_TERRAIN,
-	OPT_MAXCLIENTS,
-	OPT_LAN,
-	OPT_VERBOSITY,
-	OPT_LOGVERBOSITY,
-	OPT_PASS,
-	OPT_INET,
-	OPT_LOGFILENAME,
-	OPT_SCRIPTNAME,
-	OPT_WEBSERVER,
-	OPT_WEBSERVER_PORT,
-	OPT_VERSION,
-	OPT_FOREGROUND,
-	OPT_CONFIGFILE,
-	OPT_RESDIR,
-	OPT_AUTHFILE,
-	OPT_MOTDFILE,
-	OPT_RULESFILE,
-	OPT_VEHICLELIMIT,
-	OPT_OWNER,
-	OPT_WEBSITE,
-	OPT_IRC,
-	OPT_VOIP,
-};
-
-// option array
-static CSimpleOpt::SOption cmdline_options[] = {
-	{ OPT_IP,             ((char *)"-ip"),   SO_REQ_SEP },
-	{ OPT_PORT,           ((char *)"-port"), SO_REQ_SEP },
-	{ OPT_NAME,           ((char *)"-name"), SO_REQ_SEP },
-	{ OPT_PASS,           ((char *)"-password"), SO_REQ_SEP },
-	{ OPT_TERRAIN,        ((char *)"-terrain"), SO_REQ_SEP },
-	{ OPT_MAXCLIENTS,     ((char *)"-maxclients"), SO_REQ_SEP },
-	{ OPT_LAN,            ((char *)"-lan"), SO_NONE },
-	{ OPT_INET,           ((char *)"-inet"), SO_NONE },
-	{ OPT_VERBOSITY,      ((char *)"-verbosity"), SO_REQ_SEP },
-	{ OPT_LOGVERBOSITY,   ((char *)"-logverbosity"), SO_REQ_SEP },
-	{ OPT_LOGFILENAME,    ((char *)"-logfilename"), SO_REQ_SEP },
-	{ OPT_SCRIPTNAME,     ((char *)"-script"), SO_REQ_SEP },
-	{ OPT_WEBSERVER,      ((char *)"-webserver"), SO_NONE },
-	{ OPT_WEBSERVER_PORT, ((char *)"-webserverport"), SO_REQ_SEP },
-	{ OPT_VERSION,        ((char *)"-version"), SO_NONE },
-	{ OPT_HELP,           ((char *)"-?"), SO_NONE },	
-	{ OPT_HELP,           ((char *)"-h"), SO_NONE },
-	{ OPT_HELP,           ((char *)"-help"), SO_NONE },
-	{ OPT_HELP,           ((char *)"--help"), SO_NONE },
-	{ OPT_HELP,           ((char *)"/\?"), SO_NONE },	
-	{ OPT_HELP,           ((char *)"/help"), SO_NONE },
-	{ OPT_HELP,           ((char *)"/h"), SO_NONE },	
-	{ OPT_FOREGROUND,     ((char *)"-fg"), SO_NONE },
-	{ OPT_CONFIGFILE,     ((char *)"-c"), SO_REQ_SEP },
-	{ OPT_CONFIGFILE,     ((char *)"-config"), SO_REQ_SEP },
-	{ OPT_RESDIR,         ((char *)"-resdir"), SO_REQ_SEP },
-	{ OPT_AUTHFILE,       ((char *)"-authfile"), SO_REQ_SEP },
-	{ OPT_MOTDFILE,       ((char *)"-motdfile"), SO_REQ_SEP },
-	{ OPT_RULESFILE,      ((char *)"-rulesfile"), SO_REQ_SEP },
-	{ OPT_VEHICLELIMIT,   ((char *)"-vehiclelimit"), SO_REQ_SEP },
-	{ OPT_OWNER,          ((char *)"-owner"), SO_REQ_SEP },
-	{ OPT_WEBSITE,        ((char *)"-website"), SO_REQ_SEP },
-	{ OPT_IRC,            ((char *)"-irc"), SO_REQ_SEP },
-	{ OPT_VOIP,           ((char *)"-voip"), SO_REQ_SEP },
-	SO_END_OF_OPTIONS
-};
-#endif //NOCMDLINE
-
-//======== helper functions ====================================================
-int getRandomPort()
-{
-	{
-		unsigned int tick_count = 0;
-		// we need to be that precise here as it may happen that we start several servers at once, and thus the seed must be different
 #ifdef _WIN32
-		LARGE_INTEGER tick;
-		QueryPerformanceCounter(&tick);
-		tick_count = (unsigned int)tick.QuadPart;
-#else // _WIN32
-		struct timeval now;
-		gettimeofday(&now, NULL);
-		tick_count = (now.tv_sec * 1000) + (now.tv_usec / 1000);
+#   define RESOURCE_DIR ""
+#else // _WIN32 ~ trailing slash important
+#   define RESOURCE_DIR "/usr/share/rorserver/"
 #endif // _WIN32
-		// init the random number generator
-		srand (tick_count);
-	}
-	return 12000 + (rand()%1000);
+
+// ============================== Variables ===================================
+
+static std::string s_server_name;
+static std::string s_terrain_name("any");
+static std::string s_public_password;
+static std::string s_ip_addr("0.0.0.0");
+static std::string s_scriptname;
+static std::string s_authfile("admins.txt");
+static std::string s_motdfile("motd.txt");
+static std::string s_rulesfile("rules.txt");
+static std::string s_owner;
+static std::string s_website;
+static std::string s_irc;
+static std::string s_voip;
+static std::string s_masterserver_host("multiplayer.rigsofrods.org");
+static std::string s_masterserver_url_prefix("");
+static std::string s_resourcedir(RESOURCE_DIR);
+
+static unsigned int s_max_vehicles(20);
+static unsigned int s_webserver_port(0);
+static unsigned int s_listen_port(0);
+static unsigned int s_max_clients(16);
+static unsigned int s_heartbeat_retry_count(5);
+static unsigned int s_heatbeat_retry_seconds(15);
+
+static bool s_print_stats(false);
+static bool s_webserver_enabled(false);
+static bool s_foreground(false);
+static bool s_show_version(false);
+static bool s_show_help(false);
+
+static ServerType s_server_mode(SERVER_AUTO);
+
+// ============================== Functions ===================================
+
+namespace Config
+{
+
+void ShowHelp()
+{
+    printf("\n"
+        "Usage: rorserver [OPTIONS]\n"
+        "[OPTIONS] can be in Un*x `--help` or windows `/help` notation\n"
+        "\n"
+        " ~config-file (-c) <JSON file> Loads the configuration from a file\n"
+        " ~name <name>                 Name of the server, no spaces, only\n"
+        "                              [a-z,0-9,A-Z]\n"
+        " ~terrain <mapname>           Map name (defaults to 'any')\n"
+        " ~max-clients|speed <clients> Maximum clients allowed\n"
+        " ~lan|inet                    Private or public server (defaults to inet)\n"
+        "\n"
+        " ~password <password>         Private server password\n"
+        " ~ip <ip>                     Public IP address to register with.\n"
+        " ~port <port>                 Port to use (defaults to random 12000-12500)\n"
+        " ~verbosity {0-5}             Sets displayed log verbosity\n"
+        " ~log-verbosity {0-5}         Sets file log verbositylog verbosity\n"
+        "                              levels available to verbosity and logverbosity:\n"
+        "                                  0 = stack\n"
+        "                                  1 = debug\n"
+        "                                  2 = verbosity\n"
+        "                                  3 = info\n"
+        "                                  4 = warn\n"
+        "                                  5 = error\n"
+        " ~log-file <server.log>       Sets the filename of the log\n"
+        " ~script-file <script.as>     server script to execute\n"
+        " ~use-webserver               enables the built-in webserver\n"
+        " ~webserver-port <number>     sets up the port for the webserver, default is game port + 100\n"
+        " ~version                     prints the server version numbers\n"
+        " ~fg                          starts the server in the foreground (background by default)\n"
+        " ~resource-dir <path>         sets the path to the resource directory\n"
+        " ~auth-file <server.auth>     Sets the filename of the file that contains authorization info\n"
+        " ~motdf-ile <server.motd>     Sets the filename of the file that contains the message of the day\n"
+        " ~rules-file <server.rules>   Sets the filename of the file that contains rules for this server\n"
+        " ~vehicle-limit {0-...}       Sets the maximum number of vehicles that a user is allowed to have\n"
+        " ~owner <name|organisation>   Sets the owner of this server (for the !owner command) (optional)\n"
+        " ~website <URL>               Sets the website of this server (for the !website command) (optional)\n"
+        " ~irc <URL>                   Sets the IRC url for this server (for the !irc command) (optional)\n"
+        " ~voip <URL>                  Sets the voip url for this server (for the !voip command) (optional)\n"
+        " ~help                        Show this list\n");
 }
 
-std::string Config::getPublicIP()
+void ShowVersion()
 {
-	SWBaseSocket::SWBaseError error;
-	SWInetSocket mySocket;
-	
-	if( !mySocket.connect(80, REPO_SERVER, &error) )
-		return "";
-
-	char query[2048] = {0};
-	sprintf(query, "GET /getpublicip/ HTTP/1.1\r\nHost: %s\r\n\r\n", REPO_SERVER);
-	Logger::log(LOG_DEBUG, "Query to get public IP: %s\n", query);
-	if( mySocket.sendmsg(query, &error) < 0 )
-		return "";
-	
-	std::string retval = mySocket.recvmsg(250, &error);
-	if( error != SWBaseSocket::ok )
-		return "";
-	Logger::log(LOG_DEBUG, "Response from public IP request :'%s'", retval.c_str() );
-	
-	HttpMsg msg( retval );
-	retval = msg.getBody();
-	//		printf("Response:'%s'\n", pubip);
-	
-	// disconnect
-	mySocket.disconnect();
-	return retval;
-}
-
-void showUsage()
-{
-	printf("\n" \
-"Usage: rorserver [OPTIONS] <paramaters>\n" \
-" Where [OPTIONS] and <parameters>\n" \
-" -c (-config) <config file>   Loads the configuration from a file rather than from the commandline\n"
-" -name <name>                 Name of the server, no spaces, only \n"
-"                              [a-z,0-9,A-Z]\n"
-" -terrain <mapname>           Map name (defaults to 'any')\n"
-" -maxclients|speed <clients>  Maximum clients allowed \n"
-" -lan|inet                    Private or public server (defaults to inet)\n"
-"\n"
-" -password <password>         Private server password\n"
-" -ip <ip>                     Public IP address to register with.\n"
-" -port <port>                 Port to use (defaults to random 12000-12500)\n"
-" -verbosity {0-5}             Sets displayed log verbosity\n"
-" -logverbosity {0-5}          Sets file log verbositylog verbosity\n"
-"                              levels available to verbosity and logverbosity:\n"
-"                                  0 = stack\n"
-"                                  1 = debug\n"
-"                                  2 = verbosity\n"
-"                                  3 = info\n"
-"                                  4 = warn\n"
-"                                  5 = error\n" \
-" -logfilename <server.log>    Sets the filename of the log\n" \
-" -script <script.as>          server script to execute\n" \
-" -webserver                   enables the built-in webserver\n" \
-" -webserver-port <number>     sets up the port for the webserver, default is game port + 100\n" \
-" -script <script.as>          server script to execute\n" \
-" -version                     prints the server version numbers\n" \
-" -fg                          starts the server in the foreground (background by default)\n" \
-" -resdir <path>               sets the path to the resource directory\n" \
-" -authfile <server.auth>      Sets the filename of the file that contains authorization info\n" \
-" -motdfile <server.motd>      Sets the filename of the file that contains the message of the day\n" \
-" -rulesfile <server.rules>    Sets the filename of the file that contains rules for this server\n" \
-" -vehiclelimit {0-...}        Sets the maximum number of vehicles that a user is allowed to have\n" \
-" -owner <name|organisation>   Sets the owner of this server (for the !owner command) (optional)\n" \
-" -website <URL>               Sets the website of this server (for the !website command) (optional)\n" \
-" -irc <URL>                   Sets the IRC url for this server (for the !irc command) (optional)\n" \
-" -voip <URL>                  Sets the voip url for this server (for the !voip command) (optional)\n" \
-" -help                        Show this list\n");
-}
-
-//==============================================================================
-
-
-Config Config::instance;
-
-Config::Config():
-	max_clients( 16 ),
-	server_name( "" ),
-	terrain_name( "any" ),
-	ip_addr( "0.0.0.0" ),
-	scriptname(""),
-	listen_port( 0 ),
-	server_mode( SERVER_AUTO ),
-	print_stats(false),
-	webserver_port( 0 ),
-	foreground(false),
-	authfile("admins.txt"),
-	motdfile("motd.txt"),
-	rulesfile("rules.txt"),
-	max_vehicles( 20 ),
-	owner(""),
-	website(""),
-	irc(""),
-	voip(""),
-#ifdef _WIN32
-	resourcedir()
-#else // _WIN32
-	resourcedir("/usr/share/rorserver/") // trailing slash important
-#endif // _WIN32
-{
-}
-
-Config::~Config()
-{
+    printf("Rigs of Rods Server\n");
+    printf(" * using Protocol %s\n", RORNET_VERSION);
+    printf(" * built on %s, %s\n", __DATE__, __TIME__);
+#ifdef __GNUC__
+    printf(" * built with gcc %d.%d.%d\n", __GNUC_MINOR__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+#endif //__GNUC__
 }
 
 //! runs a check that all the required fields are present
-bool Config::checkConfig()
+bool checkConfig()
 {
-	
-	switch ( getServerMode() )
-	{
-	case SERVER_AUTO:
-		Logger::log(LOG_INFO, "server started in automatic mode.");
-		break;
-	case SERVER_LAN:
-		Logger::log(LOG_INFO, "server started in LAN mode.");
-		break;
-	case SERVER_INET:
-		Logger::log(LOG_INFO, "server started in Internet mode.");
-		break;
-	}
+    switch ( getServerMode() )
+    {
+    case SERVER_AUTO:
+        Logger::Log(LOG_INFO, "server started in automatic mode.");
+        break;
+    case SERVER_LAN:
+        Logger::Log(LOG_INFO, "server started in LAN mode.");
+        break;
+    case SERVER_INET:
+        Logger::Log(LOG_INFO, "server started in Internet mode.");
+        break;
+    }
 
-	// settings required by INET mode
-	if( getServerMode() != SERVER_LAN )
-	{
+    if( !getListenPort() )
+    {
+        Logger::Log( LOG_WARN, "No port supplied, randomly generating one");
+        setListenPort( Utils::generateRandomPortNumber() );
+    }
 
-        Logger::log( LOG_INFO, "Starting server in INET mode" );
-	    if( getIPAddr() == "0.0.0.0" )
-	    {
-	        Logger::log( LOG_WARN, "no IP address has been specified, attempting to "
-	                "detect.");
-	        setIPAddr( getPublicIP() );
-	        
-	        if( getIPAddr().empty() )
-	            Logger::log(LOG_ERROR, "could not get public IP automatically!");
-	    }
-	    
-		if( getIPAddr().empty() )
-		{
-			Logger::log( LOG_ERROR, "IP adddress not specified.");
-			return 0;
-		}
-		else
-			Logger::log( LOG_INFO, "ip address: %s", getIPAddr().c_str() );
-		
-		Logger::log(LOG_WARN, "app. full load traffic: %ikbit/s upload and "
-				"%ikbit/s download", 
-				getMaxClients()*(getMaxClients()-1)*64, getMaxClients()*64);
-		
-		if( getServerName().empty() )
-		{
-			Logger::log( LOG_ERROR, "Server name not specified.");
-			return 0;
-		}
-		else
-			Logger::log( LOG_INFO, "servername: %s", getServerName().c_str() );		
-	}
-	if( !getListenPort() )
-	{
-		Logger::log( LOG_WARN, "No port supplied, randomly generating one");
-		setListenPort( getRandomPort() );
-	}
+    if( getWebserverEnabled() && !getWebserverPort() )
+    {
+        Logger::Log( LOG_WARN, "No Webserver port supplied, using listen port + 100: %d", getListenPort() + 100);
+        setWebserverPort(getListenPort() + 100);
+    }
 
-	if( getWebserverEnabled() && !getWebserverPort() )
-	{
-		Logger::log( LOG_WARN, "No Webserver port supplied, using listen port + 100: %d", getListenPort() + 100);
-		setWebserverPort(getListenPort() + 100);
-	}
+    Logger::Log( LOG_INFO, "port:       %d", getListenPort() );
+    
+    if( getTerrainName().empty() )
+    {
+        Logger::Log( LOG_ERROR, "terrain not specified" );
+        return 0;
+    }
+    else
+        Logger::Log( LOG_INFO, "terrain:    %s", getTerrainName().c_str() );
+    
+    if( getMaxClients() < 2 || getMaxClients() > 64 )
+    {
+        Logger::Log( LOG_ERROR, "Max clients need to 2 or more, and 64 or less." );
+        return 0;
+    }
+    else
+        Logger::Log( LOG_INFO, "maxclients: %d", getMaxClients());
+        
+    if( getAuthFile().empty() )
+    {
+        Logger::Log( LOG_ERROR, "Authorizations file not specified. Using default (admins.txt)" );
+        setAuthFile("admins.txt");
+    }
 
-	Logger::log( LOG_INFO, "port:       %d", getListenPort() );
-	
-	if( getTerrainName().empty() )
-	{
-		Logger::log( LOG_ERROR, "terrain not specified" );
-		return 0;
-	}
-	else
-		Logger::log( LOG_INFO, "terrain:    %s", getTerrainName().c_str() );
-	
-	if( getMaxClients() < 2 || getMaxClients() > 64 )
-	{
-		Logger::log( LOG_ERROR, "Max clients need to 2 or more, and 64 or less." );
-		return 0;
-	}
-	else
-		Logger::log( LOG_INFO, "maxclients: %d", getMaxClients());
-		
-	if( getAuthFile().empty() )
-	{
-		Logger::log( LOG_ERROR, "Authorizations file not specified. Using default (admins.txt)" );
-		setAuthFile("admins.txt");
-	}
+    if( getMOTDFile().empty() )
+    {
+        Logger::Log( LOG_ERROR, "MOTD file not specified. Using default (motd.txt)." );
+        setMOTDFile("motd.txt");
+    }
 
-	if( getMOTDFile().empty() )
-	{
-		Logger::log( LOG_ERROR, "MOTD file not specified. Using default (motd.txt)." );
-		setMOTDFile("motd.txt");
-	}
+    if( getMaxVehicles()<1 )
+    {
+        Logger::Log( LOG_ERROR, "The vehicle-limit cannot be less than 1!" );
+        return 0;
+    }
 
-	if( getMaxVehicles()<1 )
-	{
-		Logger::log( LOG_ERROR, "The vehicle-limit cannot be less than 1!" );
-		return 0;
-	}
+    Logger::Log( LOG_INFO, "server is%s password protected",
+            getPublicPassword().empty() ? " NOT": "" );
 
-	Logger::log( LOG_INFO, "server is%s password protected",
-			getPublicPassword().empty() ? " NOT": "" );
-
-	return getMaxClients() && getListenPort() && !getIPAddr().empty() && 
-			!getTerrainName().empty();
+    return getMaxClients() && getListenPort() && !getIPAddr().empty() && 
+            !getTerrainName().empty();
 }
 
-bool Config::fromArgs( int argc, char* argv[] )
+#define HANDLE_ARG_VALUE(_NAME_, _BLOCK_)           \
+{                                                   \
+    if(strcmp(arg, _NAME_) == 0)                    \
+    {                                               \
+        if (pos + 1 < argc)                         \
+        {                                           \
+            const char* value = argv[pos + 1];      \
+            { _BLOCK_ }                             \
+            pos += 2;                               \
+            continue;                               \
+        }                                           \
+        else                                        \
+        {                                           \
+            Logger::Log(LOG_WARN,                   \
+                "Command line error: argument `%s`" \
+                "at position %d without value",     \
+                arg, pos);                          \
+            return false;                           \
+        }                                           \
+    }                                               \
+}
+
+#define HANDLE_ARG_FLAG(_NAME_, _BLOCK_)            \
+{                                                   \
+    if(strcmp(arg, _NAME_) == 0)                    \
+    {                                               \
+        _BLOCK_                                     \
+        pos += 1;                                   \
+        continue;                                   \
+    }                                               \
+}
+
+bool ProcessArgs( int argc, char* argv[] )
 {
 #ifndef NOCMDLINE
-	// parse arguments
-	CSimpleOpt args(argc, argv, cmdline_options);
-	while (args.Next()) {
-		if (args.LastError() == SO_SUCCESS) {
-			switch( args.OptionId() ) 
-			{
-			case OPT_IP:
-				setIPAddr( args.OptionArg() );
-				break;
-			case OPT_NAME:
-				setServerName( args.OptionArg() );
-			break;
-			case OPT_LOGFILENAME:
-				Logger::setOutputFile(std::string(args.OptionArg()));
-			break;
-			case OPT_SCRIPTNAME:
-				setScriptName(args.OptionArg());
-			break;
-			case OPT_TERRAIN:
-				setTerrain( args.OptionArg() );
-			break;
-			case OPT_PASS:
-				setPublicPass( args.OptionArg() );
-			break;
-			case OPT_VERSION:
-				printf("Rigs of Rods Server\n");
-				printf(" * using Protocol %s\n", RORNET_VERSION);
-				printf(" * Revision %s\n", VERSION);
-				printf(" * built on %s, %s\n", __DATE__, __TIME__);
-#ifdef __GNUC__
-				printf(" * built with gcc %d.%d.%d\n", __GNUC_MINOR__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
-#endif //__GNUC__
-				exit(0);
-			break;
-			case OPT_PORT:
-				setListenPort( atoi(args.OptionArg()) );
-			break;
-			case OPT_VERBOSITY:
-				Logger::setLogLevel(LOGTYPE_DISPLAY, LogLevel(atoi(args.OptionArg())));
-			break;
-			case OPT_LOGVERBOSITY:
-				Logger::setLogLevel(LOGTYPE_FILE, LogLevel(atoi(args.OptionArg())));
-			break;
-			case OPT_LAN:
-				setServerMode( SERVER_LAN );
-			break;
-			case OPT_INET:
-				setServerMode( SERVER_INET );
-			break;
-			case OPT_WEBSERVER:
-				setWebserverEnabled(true);
-			break;
-			case OPT_WEBSERVER_PORT:
-				setWebserverPort(atoi(args.OptionArg()));
-			break;
-			case OPT_MAXCLIENTS:
-				setMaxClients( atoi(args.OptionArg()) );
-			break;
-			case OPT_FOREGROUND:
-				setForeground(true);
-			break;
-			case OPT_RESDIR:
-				setResourceDir(args.OptionArg());
-			break;
-			case OPT_AUTHFILE:
-				setAuthFile(args.OptionArg());
-			break;
-			case OPT_MOTDFILE:
-				setMOTDFile(args.OptionArg());
-			break;
-			case OPT_RULESFILE:
-				setRulesFile(args.OptionArg());
-			break;
-			case OPT_VEHICLELIMIT:
-				setMaxVehicles( atoi(args.OptionArg()) );
-			break;
-			case OPT_OWNER:
-				setOwner(args.OptionArg());
-			break;
-			case OPT_WEBSITE:
-				setWebsite(args.OptionArg());
-			break;
-			case OPT_IRC:
-				setIRC(args.OptionArg());
-			break;
-			case OPT_VOIP:
-				setVoIP(args.OptionArg());
-			break;
-			case OPT_CONFIGFILE:
-				loadConfigFile(args.OptionArg());
-			break;
-			case OPT_HELP: 
-			default:
-				showUsage();
-				return false;
-			}
-		}
-	}
-	if(getForeground() && !getWebserverEnabled() && !getPrintStats())
-	{
-		// add console overview printing when the webserver is not enabled
-		setPrintStats(true);
-	}
+    int pos = 1;
+    const char* config_file = nullptr;
+    while (pos < argc)
+    {
+        // Cut off the leading `-`, `--` or `/` (windows)
+        char* arg = argv[pos];
+        if ((*arg != '-') && (*arg != '/'))
+        {
+            Logger::Log(LOG_WARN, "Invalid command line argument `%s` at position %d", arg, pos);
+            pos += 1;
+            continue;
+        }
+        arg += (*(arg + 1) == '-') ? 2 : 1;
 
+        HANDLE_ARG_VALUE("name",           { setServerName(value);         });
+        HANDLE_ARG_VALUE("script-file",    { setScriptName(value);         });
+        HANDLE_ARG_VALUE("terrain",        { setTerrain(value);            });
+        HANDLE_ARG_VALUE("password",       { setPublicPass(value);         });
+        HANDLE_ARG_VALUE("ip",             { setIPAddr(value);             });
+        HANDLE_ARG_VALUE("resource-dir",   { setResourceDir(value);        });
+        HANDLE_ARG_VALUE("auth-file",      { setAuthFile(value);           });
+        HANDLE_ARG_VALUE("motd-file",      { setMOTDFile(value);           });
+        HANDLE_ARG_VALUE("rules-file",     { setRulesFile(value);          });
+        HANDLE_ARG_VALUE("owner",          { setOwner(value);              });
+        HANDLE_ARG_VALUE("website",        { setWebsite(value);            });
+        HANDLE_ARG_VALUE("irc",            { setIRC(value);                });
+        HANDLE_ARG_VALUE("voip",           { setVoIP(value);               });
+        HANDLE_ARG_VALUE("config-file",    { config_file = value;          });
+        HANDLE_ARG_VALUE("c",              { config_file = value;          });
+
+        HANDLE_ARG_VALUE("max-clients",    { setMaxClients(atoi(value));   });
+        HANDLE_ARG_VALUE("webserver-port", { setWebserverPort(atoi(value));});
+        HANDLE_ARG_VALUE("vehicle-limit",  { setMaxVehicles(atoi(value));  });
+        HANDLE_ARG_VALUE("port",           { setListenPort(atoi(value));   });
+
+        HANDLE_ARG_FLAG ("print-stats",    { setPrintStats(true);          });
+        HANDLE_ARG_FLAG ("use-webserver",  { setWebserverEnabled(true);    });
+        HANDLE_ARG_FLAG ("foreground",     { setForeground(true);          });
+        HANDLE_ARG_FLAG ("fg",             { setForeground(true);          });
+        HANDLE_ARG_FLAG ("inet",           { setServerMode(SERVER_INET);   });
+        HANDLE_ARG_FLAG ("lan",            { setServerMode(SERVER_LAN);    });
+        HANDLE_ARG_FLAG ("version",        { s_show_version = true;        });
+        HANDLE_ARG_FLAG ("help",           { s_show_help = true;           });
+        HANDLE_ARG_FLAG ("h",              { s_show_help = true;           });
+        HANDLE_ARG_FLAG ("?",              { s_show_help = true;           });
+
+        // Logging
+        HANDLE_ARG_VALUE("log-file",      { Logger::SetOutputFile(value);                                });
+        HANDLE_ARG_VALUE("verbosity",     { Logger::SetLogLevel(LOGTYPE_DISPLAY, (LogLevel)atoi(value)); });
+        HANDLE_ARG_VALUE("log-verbosity", { Logger::SetLogLevel(LOGTYPE_FILE,    (LogLevel)atoi(value)); });
+
+        Logger::Log(LOG_WARN, "Unrecognized argument `%s` at position %d", arg, pos);
+        pos += 1;
+    }
+
+    if (config_file != nullptr)
+    {
+        LoadConfigFile(config_file);
+    }
 #endif //NOCMDLINE
-	return true;
+    return true;
 }
 
-//! checks if a password has been set for server access
-bool Config::isPublic() { return !getPublicPassword().empty(); }
+bool isPublic() { return !getPublicPassword().empty(); }
 
-//! getter function
-//!@{
-unsigned int       Config::getMaxClients()      { return instance.max_clients;     }
-const std::string& Config::getServerName()      { return instance.server_name;     }
-const std::string& Config::getTerrainName()     { return instance.terrain_name;    }
-const std::string& Config::getPublicPassword()  { return instance.public_password; }
-const std::string& Config::getIPAddr()          { return instance.ip_addr;         }
-const std::string& Config::getScriptName()      { return instance.scriptname;      }
-bool               Config::getEnableScripting() { return (instance.scriptname != ""); }
-unsigned int       Config::getListenPort()      { return instance.listen_port;     }
-ServerType         Config::getServerMode()      { return instance.server_mode;     }
-bool               Config::getPrintStats()      { return instance.print_stats;     }
-bool               Config::getWebserverEnabled(){ return instance.webserver_enabled; }
-unsigned int       Config::getWebserverPort()   { return instance.webserver_port;  }
-bool               Config::getForeground()      { return instance.foreground;      }
-const std::string& Config::getResourceDir()     { return instance.resourcedir;     }
-const std::string& Config::getAuthFile()        { return instance.authfile;        }
-const std::string& Config::getMOTDFile()        { return instance.motdfile;        }
-const std::string& Config::getRulesFile()       { return instance.rulesfile;       }
-unsigned int       Config::getMaxVehicles()     { return instance.max_vehicles;    }
-const std::string& Config::getOwner()           { return instance.owner;           }
-const std::string& Config::getWebsite()         { return instance.website;         }
-const std::string& Config::getIRC()             { return instance.irc;             }
-const std::string& Config::getVoIP()            { return instance.voip;            }
+unsigned int       getMaxClients()      { return s_max_clients;        }
+const std::string& getServerName()      { return s_server_name;        }
+const std::string& getTerrainName()     { return s_terrain_name;       }
+const std::string& getPublicPassword()  { return s_public_password;    }
+const std::string& getIPAddr()          { return s_ip_addr;            }
+const std::string& getScriptName()      { return s_scriptname;         }
+bool               getEnableScripting() { return (s_scriptname != ""); }
+unsigned int       getListenPort()      { return s_listen_port;        }
+ServerType         getServerMode()      { return s_server_mode;        }
+bool               getPrintStats()      { return s_print_stats;        }
+bool               getWebserverEnabled(){ return s_webserver_enabled;  }
+unsigned int       getWebserverPort()   { return s_webserver_port;     }
+bool               getForeground()      { return s_foreground;         }
+const std::string& getResourceDir()     { return s_resourcedir;        }
+const std::string& getAuthFile()        { return s_authfile;           }
+const std::string& getMOTDFile()        { return s_motdfile;           }
+const std::string& getRulesFile()       { return s_rulesfile;          }
+unsigned int       getMaxVehicles()     { return s_max_vehicles;       }
+const std::string& getOwner()           { return s_owner;              }
+const std::string& getWebsite()         { return s_website;            }
+const std::string& getIRC()             { return s_irc;                }
+const std::string& getVoIP()            { return s_voip;               }
+bool               GetShowVersion()     { return s_show_version;       }
+bool               GetShowHelp()        { return s_show_help;          }
 
-//!@}
+unsigned int       GetHeartbeatRetryCount()   { return s_heartbeat_retry_count;   }
+unsigned int       GetHeartbeatRetrySeconds() { return s_heatbeat_retry_seconds;  }
+const std::string& GetMasterServerHost()      { return s_masterserver_host;       }
+const std::string& GetMasterServerUrlPrefix() { return s_masterserver_url_prefix; }
 
-//! setter functions
-//!@{
-bool Config::setScriptName(const std::string& name ) { 
-	if( name.empty() ) return false;
-	instance.scriptname = name;
- 	return true;
-}
-bool Config::setMaxClients(unsigned int num) { 
-	if( num < 2 || num > 64 ) return false;
-	instance.max_clients = num;
- 	return true;
-}
-bool Config::setServerName( const std::string& name ) {
-	if( name.empty() ) return false;
-	instance.server_name = name;
-	return true;
-}
-bool Config::setTerrain( const std::string& tern ) {
-	if( tern.empty()) return false;
-	instance.terrain_name = tern;
-	return true;
-}
-bool Config::setPublicPass( const std::string& pub_pass ) {
-	if(pub_pass.length() > 0 && pub_pass.size() < 250  &&  
-			!SHA1FromString(instance.public_password, pub_pass))
-	{
-		Logger::log(LOG_ERROR, "could not generate server SHA1 password hash!");
-		instance.public_password = "";
-		return false;
-	}
-	Logger::log(LOG_DEBUG,"sha1(%s) = %s", pub_pass.c_str(), 
-			instance.public_password.c_str());
-	return true;
+
+bool setScriptName(const std::string& name )
+{ 
+    if( name.empty() ) return false;
+    s_scriptname = name;
+    return true;
 }
 
-bool Config::setIPAddr( const std::string& ip ) {
-	if( ip.empty() ) return false;
-	instance.ip_addr = ip;
-	return true;
-}
-bool Config::setListenPort( unsigned int port ) {
-	instance.listen_port = port;
-	return true;
-}
-void Config::setWebserverPort( unsigned int port ) {
-	instance.webserver_port = port;
-}
-void Config::setWebserverEnabled(bool webserver) {
-	instance.webserver_enabled = webserver;
-}
-bool Config::setServerMode( ServerType mode) {
-	instance.server_mode = mode;
-	return true;
-}
-void Config::setPrintStats(bool value)
+bool setMaxClients(unsigned int num)
 {
-	instance.print_stats = value;
-}
-void Config::setForeground(bool value) {
-	instance.foreground = value;
-}
-void Config::setResourceDir(std::string dir) {
-	if(dir.length()>0 && dir.substr(dir.length()-1)!="/")
-		dir += "/";
-	instance.resourcedir = dir;
-}
-void Config::setAuthFile(const std::string& file) {
-	instance.authfile = file;
-}
-void Config::setMOTDFile(const std::string& file) {
-	instance.motdfile = file;
+    if( num < 2 || num > 64 ) return false;
+    s_max_clients = num;
+    return true;
 }
 
-void Config::setRulesFile( const std::string& file ) {
-	instance.rulesfile = file;
-}
-
-void Config::setMaxVehicles(unsigned int num) {
-	instance.max_vehicles = num;
-}
-
-void Config::setOwner( const std::string& owner ) {
-	instance.owner = owner;
-}
-
-void Config::setWebsite( const std::string& website ) {
-	instance.website = website;
-}
-
-void Config::setIRC( const std::string& irc ) {
-	instance.irc = irc;
-}
-
-void Config::setVoIP( const std::string& voip ) {
-	instance.voip = voip;
-}
-
-void Config::loadConfigFile(const std::string& filename)
+bool setServerName( const std::string& name )
 {
-	Logger::log(LOG_INFO, "loading config file %s ...", filename.c_str());
-	rude::Config config;
-	if(config.load(filename.c_str()))
-	{
-		if(config.exists("baseconfig"))    loadConfigFile(config.getStringValue   ("baseconfig"));
-		if(config.exists("slots"))         setMaxClients(config.getIntValue       ("slots"));
-		if(config.exists("name"))          setServerName(config.getStringValue    ("name"));
-		if(config.exists("scriptname"))    setScriptName(config.getStringValue    ("scriptname"));
-		if(config.exists("terrain"))       setTerrain   (config.getStringValue    ("terrain"));
-		if(config.exists("password"))      setPublicPass(config.getStringValue    ("password"));
-		if(config.exists("ip"))            setIPAddr    (config.getStringValue    ("ip"));
-		if(config.exists("port"))          setListenPort(config.getIntValue       ("port"));
-		if(config.exists("mode"))          setServerMode((std::string(config.getStringValue("mode")) == std::string("inet"))?SERVER_INET:SERVER_LAN);
-
-		if(config.exists("printstats"))    setPrintStats(config.getBoolValue      ("printstats"));
-		if(config.exists("webserver"))     setWebserverEnabled(config.getBoolValue("webserver"));
-		if(config.exists("webserverport")) setWebserverPort(config.getIntValue    ("webserverport"));
-		if(config.exists("foreground"))    setForeground(config.getBoolValue      ("foreground"));
-
-		if(config.exists("verbosity"))     Logger::setLogLevel(LOGTYPE_DISPLAY,   (LogLevel)config.getIntValue("verbosity"));
-		if(config.exists("logverbosity"))  Logger::setLogLevel(LOGTYPE_FILE,      (LogLevel)config.getIntValue("logverbosity"));
-		if(config.exists("resdir"))        setResourceDir(config.getStringValue   ("resdir"));
-		if(config.exists("logfilename"))   Logger::setOutputFile(config.getStringValue("logfilename"));
-		if(config.exists("authfile"))      setAuthFile(config.getStringValue      ("authfile"));
-		if(config.exists("motdfile"))      setMOTDFile(config.getStringValue      ("motdfile"));
-		if(config.exists("rulesfile"))     setRulesFile(config.getStringValue     ("rulesfile"));
-		if(config.exists("vehiclelimit"))  setMaxVehicles(config.getIntValue      ("vehiclelimit"));
-		if(config.exists("owner"))         setOwner(config.getStringValue         ("owner"));
-		if(config.exists("website"))       setWebsite(config.getStringValue       ("website"));
-		if(config.exists("irc"))           setIRC(config.getStringValue           ("irc"));
-		if(config.exists("voip"))          setVoIP(config.getStringValue          ("voip"));
-	} else
-	{
-		Logger::log(LOG_ERROR, "could not load config file %s : %s", filename.c_str(), config.getError());
-	}
+    if( name.empty() ) return false;
+    s_server_name = name;
+    return true;
 }
-//!@}
+
+bool setTerrain( const std::string& tern )
+{
+    if( tern.empty()) return false;
+    s_terrain_name = tern;
+    return true;
+}
+
+bool setPublicPass( const std::string& pub_pass )
+{
+    if(pub_pass.length() > 0 && pub_pass.size() < 250  &&  
+            !SHA1FromString(s_public_password, pub_pass))
+    {
+        Logger::Log(LOG_ERROR, "could not generate server SHA1 password hash!");
+        s_public_password = "";
+        return false;
+    }
+    Logger::Log(LOG_DEBUG,"sha1(%s) = %s", pub_pass.c_str(), 
+            s_public_password.c_str());
+    return true;
+}
+
+bool setIPAddr( const std::string& ip )
+{
+    if( ip.empty() ) return false;
+    s_ip_addr = ip;
+    return true;
+}
+
+bool setListenPort( unsigned int port )
+{
+    s_listen_port = port;
+    return true;
+}
+
+void setWebserverPort( unsigned int port )  { s_webserver_port = port;         }
+void setWebserverEnabled(bool webserver)    { s_webserver_enabled = webserver; }
+void setPrintStats(bool value)              { s_print_stats = value;           }
+void setAuthFile(const std::string& file)   { s_authfile = file;               }
+void setMOTDFile(const std::string& file)   { s_motdfile = file;               }
+void setRulesFile(const std::string& file)  { s_rulesfile = file;              }
+void setMaxVehicles(unsigned int num)       { s_max_vehicles = num;            }
+void setOwner(const std::string& owner)     { s_owner = owner;                 }
+void setForeground(bool value)              { s_foreground = value;            }
+void setWebsite(const std::string& website) { s_website = website;             }
+void setIRC(const std::string& irc)         { s_irc = irc;                     }
+void setVoIP(const std::string& voip)       { s_voip = voip;                   }
+
+void SetMasterServerHost(const std::string& value)      { s_masterserver_host = value;       }
+void SetMasterServerUrlPrefix(const std::string& value) { s_masterserver_url_prefix = value; }
+
+bool setServerMode( ServerType mode)
+{
+    s_server_mode = mode;
+    return true;
+}
+
+void setResourceDir(std::string dir)
+{
+    if(dir.length()>0 && dir.substr(dir.length()-1)!="/")
+        dir += "/";
+    s_resourcedir = dir;
+}
+
+#define GET_VALUE_STR( _KEY_, _SETTER_) { if (root[_KEY_].isString())  _SETTER_(root[_KEY_].asString()); }
+#define GET_VALUE_INT( _KEY_, _SETTER_) { if (root[_KEY_].isNumeric()) _SETTER_(root[_KEY_].asInt()); }
+#define GET_VALUE_BOOL(_KEY_, _SETTER_) { if (root[_KEY_].isBool())    _SETTER_(root[_KEY_].asBool()); }
+
+bool LoadConfigFile(const std::string& filename)
+{
+    Logger::Log(LOG_INFO, "loading config file %s ...", filename.c_str());
+    Json::Reader reader;
+    Json::Value root;
+    std::ifstream conf_file(filename);
+    if (!conf_file.is_open())
+    {
+        Logger::Log(LOG_ERROR, "Failed to open config file %s", filename.c_str());
+        return false;
+    }
+    if (!reader.parse(conf_file, root, false) || !root.isObject())
+    {
+        Logger::Log(LOG_ERROR, "could not load config file %s, error messages:\n%s", filename.c_str(), reader.getFormattedErrorMessages().c_str());
+        return false;
+    }
+
+    if (root["base-config"].isString())
+    {
+        LoadConfigFile(root["base-config"].asString());
+    }
+    if (root["mode"].isString())
+    {
+        if (root["mode"] == "lan")
+        {
+            setServerMode(SERVER_LAN);
+        }
+        else if (root["mode"] == "inet")
+        {
+            setServerMode(SERVER_INET);
+        }
+    }
+    if (root["verbosity"].isNumeric())
+    {
+        Logger::SetLogLevel(LOGTYPE_DISPLAY, (LogLevel)root["verbosity"].asInt());
+    }
+    if (root["log-verbosity"].isNumeric())
+    {
+        Logger::SetLogLevel(LOGTYPE_FILE, (LogLevel)root["log-verbosity"].asInt());
+    }
+
+    GET_VALUE_STR("name",           setServerName);
+    GET_VALUE_STR("script-file",    setScriptName);
+    GET_VALUE_STR("terrain",        setTerrain);
+    GET_VALUE_STR("password",       setPublicPass);
+    GET_VALUE_STR("ip",             setIPAddr);
+    GET_VALUE_STR("resource-dir",   setResourceDir);
+    GET_VALUE_STR("log-file",       Logger::SetOutputFile);
+    GET_VALUE_STR("auth-file",      setAuthFile);
+    GET_VALUE_STR("motd-file",      setMOTDFile);
+    GET_VALUE_STR("rules-file",     setRulesFile);
+    GET_VALUE_STR("owner",          setOwner);
+    GET_VALUE_STR("website",        setWebsite);
+    GET_VALUE_STR("irc",            setIRC);
+    GET_VALUE_STR("voip",           setVoIP);
+
+    GET_VALUE_STR("masterserver-host",       SetMasterServerHost);
+    GET_VALUE_STR("masterserver-url-prefix", SetMasterServerUrlPrefix);
+
+    GET_VALUE_INT("max-clients",    setMaxClients);
+    GET_VALUE_INT("webserver-port", setWebserverPort);
+    GET_VALUE_INT("vehicle-limit",  setMaxVehicles);
+
+    GET_VALUE_BOOL("print-stats",   setPrintStats);
+    GET_VALUE_BOOL("use-webserver", setWebserverEnabled);
+    GET_VALUE_BOOL("foreground",    setForeground);
+
+    return true;
+}
+
+} //namespace Config
+
