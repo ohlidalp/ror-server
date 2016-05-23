@@ -35,15 +35,24 @@ Client::Client():
     m_is_registered(false)
 {}
 
+char* BeginUrl(char* buffer, const char* path)
+{
+    char* pos = buffer;
+    pos += sprintf(buffer, "/%s/%s", Config::GetMasterServerUrlPrefix().c_str(), path);
+    return pos;
+}
+
+int HttpRequest(const char* method, const char* url, const char* content_type, const char* payload, Http::Response* response)
+{
+    const char* host = Config::GetMasterServerHost().c_str();
+    return Http::Request(method, host, url, content_type, payload, response);
+}
+
 bool Client::Register()
 {
-    const char* host = Config::GetServerlistHost().c_str();
-
     char url[1000] = { 0 };
-    char* url_pos = url;
-    url_pos += sprintf(url,
-        "%s/server-list/?ip=%s&port=%d&name=%s&terrain-name=%s&max-clients=%d&version=%s&pw=%d",
-        host,
+    char* url_pos = BeginUrl(url, "server-list");
+    url_pos += sprintf(url_pos, "?ip=%s&port=%d&name=%s&terrain-name=%s&max-clients=%d&version=%s&pw=%d",
         Config::getIPAddr().c_str(),
         Config::getListenPort(),
         Config::getServerName().c_str(),
@@ -55,7 +64,7 @@ bool Client::Register()
     Logger::Log(LOG_INFO, "Attempting to register on serverlist...");
 
     Http::Response response;
-    int result_code = Http::Request(Http::METHOD_POST, host, url, "application/json", "", &response);
+    int result_code = HttpRequest(Http::METHOD_POST, url, "application/json", "", &response);
     if (result_code < 0)
     {
         Logger::Log(LOG_ERROR, "Registration failed");
@@ -91,17 +100,15 @@ bool Client::Register()
 
 bool Client::SendHeatbeat(Json::Value user_list)
 {
-    const char* host = Config::GetServerlistHost().c_str();
-
     char url[200] = { 0 };
-    sprintf(url, "%s/server-list/", host);
+    BeginUrl(url, "server-list");
 
     Json::Value data(Json::objectValue);
     data["challenge"] = m_token;
     data["users"] = user_list;
 
     Http::Response response;
-    int result_code = Http::Request(Http::METHOD_PUT, host, url, "application/json", data.asCString(), &response);
+    int result_code = HttpRequest(Http::METHOD_PUT, url, "application/json", data.asCString(), &response);
     if (result_code < 0)
     {
         Logger::Log(LOG_ERROR, "Heatbeat failed");
@@ -114,13 +121,12 @@ bool Client::UnRegister()
 {
     assert(m_is_registered == true);
 
-    const char* host = Config::GetServerlistHost().c_str();
-
     char url[200] = { 0 };
-    sprintf(url, "%s/server-list/?challenge=%s", host, m_token.c_str());
+    char* url_pos = BeginUrl(url, "server-list");
+    sprintf(url_pos, "?challenge=%s", m_token.c_str());
 
     Http::Response response;
-    int result_code = Http::Request(Http::METHOD_DELETE, host, url, "application/json", "", &response);
+    int result_code = HttpRequest(Http::METHOD_DELETE, url, "application/json", "", &response);
     if (result_code < 0)
     {
         Logger::Log(LOG_ERROR, "Failed to unregister server");
@@ -132,12 +138,11 @@ bool Client::UnRegister()
 
 bool RetrievePublicIp(std::string* out_ip)
 {
-    const char* host = Config::GetServerlistHost().c_str();
     char url[300] = { 0 };
-    sprintf(url, "%s/get-public-ip", host);
+    BeginUrl(url, "get-public-ip");
 
     Http::Response response;
-    int result_code = Http::Request(Http::METHOD_GET, host, url, "application/json", "", &response);
+    int result_code = HttpRequest(Http::METHOD_GET, url, "application/json", "", &response);
     if (result_code < 0)
     {
         Logger::Log(LOG_ERROR, "Failed to retrieve public IP address");

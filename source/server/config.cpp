@@ -52,7 +52,8 @@ static std::string s_owner;
 static std::string s_website;
 static std::string s_irc;
 static std::string s_voip;
-static std::string s_serverlist_host("multiplayer.rigsofrods.org");
+static std::string s_masterserver_host("multiplayer.rigsofrods.org");
+static std::string s_masterserver_url_prefix("");
 static std::string s_resourcedir(RESOURCE_DIR);
 
 static unsigned int s_max_vehicles(20);
@@ -321,12 +322,13 @@ const std::string& getOwner()           { return s_owner;              }
 const std::string& getWebsite()         { return s_website;            }
 const std::string& getIRC()             { return s_irc;                }
 const std::string& getVoIP()            { return s_voip;               }
-const std::string& GetServerlistHost()  { return s_serverlist_host;    }
 bool               GetShowVersion()     { return s_show_version;       }
 bool               GetShowHelp()        { return s_show_help;          }
 
-unsigned int       GetHeartbeatRetryCount()   { return s_heartbeat_retry_count;  }
-unsigned int       GetHeartbeatRetrySeconds() { return s_heatbeat_retry_seconds; }
+unsigned int       GetHeartbeatRetryCount()   { return s_heartbeat_retry_count;   }
+unsigned int       GetHeartbeatRetrySeconds() { return s_heatbeat_retry_seconds;  }
+const std::string& GetMasterServerHost()      { return s_masterserver_host;       }
+const std::string& GetMasterServerUrlPrefix() { return s_masterserver_url_prefix; }
 
 
 bool setScriptName(const std::string& name )
@@ -396,6 +398,9 @@ void setForeground(bool value)              { s_foreground = value;            }
 void setWebsite(const std::string& website) { s_website = website;             }
 void setIRC(const std::string& irc)         { s_irc = irc;                     }
 void setVoIP(const std::string& voip)       { s_voip = voip;                   }
+
+void SetMasterServerHost(const std::string& value)      { s_masterserver_host = value;       }
+void SetMasterServerUrlPrefix(const std::string& value) { s_masterserver_url_prefix = value; }
 
 bool setServerMode( ServerType mode)
 {
@@ -469,6 +474,9 @@ bool LoadConfigFile(const std::string& filename)
     GET_VALUE_STR("website",        setWebsite);
     GET_VALUE_STR("irc",            setIRC);
     GET_VALUE_STR("voip",           setVoIP);
+
+    GET_VALUE_STR("masterserver-host",       SetMasterServerHost);
+    GET_VALUE_STR("masterserver-url-prefix", SetMasterServerUrlPrefix);
 
     GET_VALUE_INT("max-clients",    setMaxClients);
     GET_VALUE_INT("webserver-port", setWebserverPort);

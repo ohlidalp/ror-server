@@ -67,7 +67,8 @@ const std::string& getOwner();
 const std::string& getWebsite();
 const std::string& getIRC();
 const std::string& getVoIP();
-const std::string& GetServerlistHost();
+const std::string& GetMasterServerHost();
+const std::string& GetMasterServerUrlPrefix();
 unsigned int       GetHeartbeatRetryCount();
 unsigned int       GetHeartbeatRetrySeconds();
 bool               GetShowHelp();
@@ -97,6 +98,8 @@ void setOwner(const std::string& owner);
 void setWebsite(const std::string& website);
 void setIRC(const std::string& irc);
 void setVoIP(const std::string& voip);
+void SetMasterServerHost(const std::string& value);
+void SetMasterServerUrlPrefix(const std::string& value);
 //!@}
 
 } // namespace Config
