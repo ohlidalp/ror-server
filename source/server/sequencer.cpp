@@ -845,6 +845,7 @@ void Sequencer::queueMessage(int uid, int type, unsigned int streamid, char *dat
 
                     QueueClientForDisconnect(client->user.uniqueid, sayMsg, false);
                     publishMode = BROADCAST_BLOCK; // drop
+                    break;
                  }
              }
         } else {
