@@ -37,6 +37,9 @@ namespace Utils {
 
     bool IsEmptyFile(std::ifstream& f);
 
+    /// For checking STREAM_REGISTER messages
+    bool isValidVehicleFileName(std::string name);
+
 } // namespace Utils
 
 void tokenize(const std::string &str,
