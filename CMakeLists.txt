@@ -74,6 +74,7 @@ endif ()
 
 add_subdirectory("dependencies/socketw")
 add_subdirectory("dependencies/jsoncpp")
+add_subdirectory("dependencies/enet")
 
 add_subdirectory("source/server")
 
