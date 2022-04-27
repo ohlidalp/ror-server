@@ -312,16 +312,12 @@ int main(int argc, char *argv[]) {
     DispatcherENet dispatcher_enet(&s_sequencer);
     dispatcher_enet.Initialize();
 
-    Listener listener(&s_sequencer, Config::getListenPort());
+    Listener listener(&s_sequencer);
     if (!listener.Initialize()) {
         return -1;
     }
 
     s_sequencer.Initialize();
-
-    if (!listener.WaitUntilReady()) {
-        return -1; // Error already logged
-    }
 
     // Listener is ready, let's register ourselves on serverlist (which will contact us back to check).
     if (server_mode != SERVER_LAN) {
