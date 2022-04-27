@@ -23,7 +23,6 @@ along with Foobar. If not, see <http://www.gnu.org/licenses/>.
 #include "blacklist.h"
 #include "prerequisites.h"
 #include "rornet.h"
-#include "mutexutils.h"
 #include "spamfilter.h"
 #include "json/json.h"
 #include "enet/enet.h"
@@ -40,6 +39,7 @@ along with Foobar. If not, see <http://www.gnu.org/licenses/>.
 #include <chrono>
 #include <queue>
 #include <vector>
+#include <mutex>
 #include <map>
 
 // How many not-vehicles streams has every user by default? (e.g.: "default" and "chat" are not-vehicles streams)
@@ -260,7 +260,7 @@ public:
     static unsigned int connCrash, connCount;
 
 private:
-    Mutex m_clients_mutex;  //!< Protects: m_clients, m_script_engine, m_auth_resolver, m_bot_count, m_num_disconnects_[total/crash]
+    std::mutex m_clients_mutex;  //!< Protects: m_clients, m_script_engine, m_auth_resolver, m_bot_count, m_num_disconnects_[total/crash]
     ScriptEngine *m_script_engine;
     UserAuth *m_auth_resolver;
     int m_bot_count;      //!< Amount of registered bots on the server.
