@@ -39,6 +39,7 @@ along with Foobar. If not, see <http://www.gnu.org/licenses/>.
 #include <stdexcept>
 #include <sstream>
 #include <cassert>
+#include <cstring>
 
 #ifdef __GNUC__
 
