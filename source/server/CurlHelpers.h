@@ -21,6 +21,14 @@ along with Foobar. If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+enum CurlStatusType
+{
+    CURL_STATUS_INVALID,
+    CURL_STATUS_PROGRESS,
+    CURL_STATUS_SUCCESS,
+    CURL_STATUS_FAILURE,
+};
+
 #ifdef WITH_CURL
 
 class ScriptEngine;
@@ -29,14 +37,6 @@ class ScriptEngine;
 #include <curl/easy.h>
 
 #include <string>
-
-enum CurlStatusType
-{
-    CURL_STATUS_INVALID,
-    CURL_STATUS_PROGRESS,
-    CURL_STATUS_SUCCESS,
-    CURL_STATUS_FAILURE,
-};
 
 
 struct CurlTaskContext
