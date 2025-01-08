@@ -156,12 +156,12 @@ void curlStatus(curlStatusType type, int n1, int n2, string displayname, string 
             break;
         
         case CURL_STATUS_SUCCESS:
-            server.say("Example server script: curlStatus(): type: CURL_STATUS_SUCCESS (" + (g_prevCurlProgress * 100) + "%)"
+            server.say("Example server script: curlStatus(): type: CURL_STATUS_SUCCESS"
                     + ", n1(curl result): " + n1 + ", n2(HTTP result): " + n2 + ", displayname: '" + displayname + "', message(payload): '" + message + "'", TO_ALL, FROM_SERVER);
             break;
             
         case CURL_STATUS_FAILURE:
-            server.say("Example server script: curlStatus(): type: CURL_STATUS_FAILURE (" + (g_prevCurlProgress * 100) + "%)"
+            server.say("Example server script: curlStatus(): type: CURL_STATUS_FAILURE"
                     + ", n1(curl result): " + n1 + ", n2(HTTP result): " + n2 + ", displayname: '" + displayname + "', message(CURL error): '" + message + "'", TO_ALL, FROM_SERVER);
             break;
     }
