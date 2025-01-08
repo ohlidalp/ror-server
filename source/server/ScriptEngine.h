@@ -304,7 +304,7 @@ public:
     * - for CURL_STATUS_PROGRESS, n1 = bytes downloaded, n2 = total bytes,
     * - otherwise, n1 = CURL return code, n2 = HTTP result code.
     */
-    void fetchUrlAsStringAsync(std::string url, std::string displayname);
+    void curlRequestAsync(std::string url, std::string displayname);
 };
 
 #endif // WITH_ANGELSCRIPT

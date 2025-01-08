@@ -23,10 +23,11 @@ along with Foobar. If not, see <http://www.gnu.org/licenses/>.
 
 enum CurlStatusType
 {
-    CURL_STATUS_INVALID,
-    CURL_STATUS_PROGRESS,
-    CURL_STATUS_SUCCESS,
-    CURL_STATUS_FAILURE,
+    CURL_STATUS_INVALID,  //!< Should never be reported.
+    CURL_STATUS_START,    //!< New CURL request started, n1/n2 both 0.
+    CURL_STATUS_PROGRESS, //!< Download in progress, n1 = bytes downloaded, n2 = total bytes.
+    CURL_STATUS_SUCCESS,  //!< CURL request finished, n1 = CURL return code, n2 = HTTP result code, message = received payload.
+    CURL_STATUS_FAILURE,  //!< CURL request finished, n1 = CURL return code, n2 = HTTP result code, message = CURL error string.
 };
 
 #ifdef WITH_CURL
@@ -49,7 +50,7 @@ struct CurlTaskContext
 
 bool GetUrlAsString(const std::string& url, CURLcode& curl_result, long& response_code, std::string& response_payload);
 
-bool GetUrlAsStringThreadFunc(CurlTaskContext task);
+bool CurlRequestThreadFunc(CurlTaskContext task);
 
 
 

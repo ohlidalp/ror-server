@@ -367,8 +367,8 @@ void ScriptEngine::init() {
     result = engine->RegisterObjectMethod("ServerScriptClass", "int cmd(int uid, string cmd)",
                                           asMETHOD(ServerScript, sendGameCommand), asCALL_THISCALL);
     assert_net(result >= 0);
-    result = engine->RegisterObjectMethod("ServerScriptClass", "void fetchUrlAsStringAsync(string url, string displayname)",
-                                          asMETHOD(ServerScript, fetchUrlAsStringAsync), asCALL_THISCALL);
+    result = engine->RegisterObjectMethod("ServerScriptClass", "void curlRequestAsync(string url, string displayname)",
+                                          asMETHOD(ServerScript, curlRequestAsync), asCALL_THISCALL);
 
     assert_net(result >= 0);
     result = engine->RegisterObjectMethod("ServerScriptClass", "int getNumClients()",
@@ -551,11 +551,13 @@ void ScriptEngine::init() {
     assert_net(result >= 0);
     result = engine->RegisterEnumValue("curlStatusType", "CURL_STATUS_INVALID", CURL_STATUS_INVALID);
     assert_net(result >= 0);
+    result = engine->RegisterEnumValue("curlStatusType", "CURL_STATUS_START", CURL_STATUS_START);
+    assert_net(result >= 0);
     result = engine->RegisterEnumValue("curlStatusType", "CURL_STATUS_PROGRESS", CURL_STATUS_PROGRESS);
     assert_net(result >= 0);
     result = engine->RegisterEnumValue("curlStatusType", "CURL_STATUS_SUCCESS", CURL_STATUS_SUCCESS);
     assert_net(result >= 0);
-    result = engine->RegisterEnumValue("curlStatusType", "CURL_STATUS_PROGRESS", CURL_STATUS_PROGRESS);
+    result = engine->RegisterEnumValue("curlStatusType", "CURL_STATUS_FAILURE", CURL_STATUS_FAILURE);
     assert_net(result >= 0);
 
     // register constants
@@ -1184,14 +1186,14 @@ int ServerScript::sendGameCommand(int uid, std::string cmd) {
     return seq->sendGameCommand(uid, cmd);
 }
 
-void ServerScript::fetchUrlAsStringAsync(std::string url, string displayname) {
+void ServerScript::curlRequestAsync(std::string url, string displayname) {
 #if WITH_CURL
     CurlTaskContext context;
     context.ctc_url = url;
     context.ctc_displayname = displayname;
     context.ctc_script_engine = this->mse;
 
-    std::packaged_task<void(CurlTaskContext)> pktask(GetUrlAsStringThreadFunc);
+    std::packaged_task<void(CurlTaskContext)> pktask(CurlRequestThreadFunc);
     std::thread(std::move(pktask), context).detach();
 #endif
 }

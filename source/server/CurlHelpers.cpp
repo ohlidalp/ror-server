@@ -78,8 +78,9 @@ bool GetUrlAsString(const std::string& url, CURLcode& curl_result, long& respons
     return true;
 }
 
-bool GetUrlAsStringThreadFunc(CurlTaskContext context)
+bool CurlRequestThreadFunc(CurlTaskContext context)
 {
+    context.ctc_script_engine->curlStatus(CURL_STATUS_START, 0, 0, context.ctc_displayname, "");
     std::string data;
     CURLcode curl_result = CURLE_OK;
     long http_response = 0;
