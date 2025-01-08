@@ -133,11 +133,6 @@ int playerChat(int uid, const string &in msg)
 void gameCmd(int uid, const string &in cmd)
 {
     server.say("Example server script: gameCmd(): UID: " + uid + ", cmd: '" + cmd + "'.", TO_ALL, FROM_SERVER);
-    if (cmd == "CURL test")
-    {
-        Invoking test CURL request.");
-        server.curlRequestAsync("https://www.rigsofrods.org", "rigsofrods.org");   
-    }
 }
 
 void curlStatus(curlStatusType type, int n1, int n2, string displayname, string message)
@@ -215,6 +210,10 @@ int myStreamRegisteredCallback(int uid, StreamRegister@ reg)
 int myChatMessageCallback(int uid, const string &in msg)
 {
     server.say("Example server script: myChatMessageCallback(): UID: " + uid + ", msg: '" + msg + "'.", TO_ALL, FROM_SERVER);
+    if (msg == "CURL test")
+    {
+        server.curlRequestAsync("https://www.rigsofrods.org", "rigsofrods.org");
+    }    
     return BROADCAST_NORMAL;
 }
 
