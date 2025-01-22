@@ -84,10 +84,16 @@ bool CurlRequestThreadFunc(CurlTaskContext context)
     std::string data;
     CURLcode curl_result = CURLE_OK;
     long http_response = 0;
-    bool result = GetUrlAsString(context.ctc_url, /*out:*/curl_result, /*out:*/http_response, /*out:*/data);
-    CurlStatusType type = result ? CURL_STATUS_SUCCESS : CURL_STATUS_FAILURE;
-    context.ctc_script_engine->curlStatus(type, (int)curl_result, (int)http_response, context.ctc_displayname, curl_easy_strerror(curl_result));
-    return result;
+    if (GetUrlAsString(context.ctc_url, /*out:*/curl_result, /*out:*/http_response, /*out:*/data))
+    {
+        context.ctc_script_engine->curlStatus(CURL_STATUS_SUCCESS, (int)curl_result, (int)http_response, context.ctc_displayname, data);
+        return true;
+    }
+    else
+    {
+        context.ctc_script_engine->curlStatus(CURL_STATUS_FAILURE, (int)curl_result, (int)http_response, context.ctc_displayname, curl_easy_strerror(curl_result));
+        return false;
+    }
 }
 
 #endif // WITH_CURL
